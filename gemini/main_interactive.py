@@ -32,6 +32,7 @@ from google.genai import types
 from config import GeminiConfig
 from query_logger import QueryLogger
 from store_registry import StoreRegistry
+from store_manager import StoreManager
 
 
 def load_chunks(chunks_dir: str) -> tuple[str, list[str]]:
@@ -70,10 +71,11 @@ def run_rag_chat(
     area: str,
     site: str,
     logger: QueryLogger,
+    store_name: str,
     temperature: float = 0.7
 ):
     """
-    Run interactive RAG chat session with logging
+    Run interactive RAG chat session with manual context loading
 
     Args:
         client: Gemini API client
@@ -83,6 +85,7 @@ def run_rag_chat(
         area: Tourism area
         site: Site name
         logger: Query logger instance
+        store_name: File Search Store name (not used - for future compatibility)
         temperature: Generation temperature
     """
     print("\n" + "=" * 70)
@@ -132,8 +135,8 @@ Answer questions based only on this source material."""
                 print("=" * 70 + "\n")
                 continue
 
-            # Query with RAG context and timing
-            print("\n-> מחפש בתכנים / Searching content...")
+            # Query using manual context (File Search not supported in google-generativeai SDK)
+            print("\n-> מחפש בתכנים / Searching context...")
             start_time = time.time()
 
             response = client.models.generate_content(
@@ -190,10 +193,6 @@ def main():
         help='Site name (default: auto-detect from registry)'
     )
     parser.add_argument(
-        '--chunks-dir',
-        help='Directory containing chunk files (default: from config)'
-    )
-    parser.add_argument(
         '--model',
         help='Gemini model to use (default from config.yaml)'
     )
@@ -202,7 +201,7 @@ def main():
 
     # Load configuration
     print("=" * 70)
-    print("📚 Tourism Guide - RAG System")
+    print("📚 Tourism Guide - RAG Chat System")
     print("=" * 70)
 
     try:
@@ -212,8 +211,6 @@ def main():
         if args.model:
             config.model_name = args.model
 
-        chunks_dir = args.chunks_dir if args.chunks_dir else config.chunks_dir
-
     except FileNotFoundError as e:
         print(f"\n❌ Configuration error: {e}")
         sys.exit(1)
@@ -221,37 +218,42 @@ def main():
         print(f"\n❌ {e}")
         sys.exit(1)
 
-    # Determine area/site from registry if not specified
+    # Get store_id from registry
     area = args.area
     site = args.site
+    store_id = None
 
-    if not area or not site:
-        try:
-            registry = StoreRegistry(config.registry_path)
-            all_stores = registry.list_all()
+    try:
+        registry = StoreRegistry(config.registry_path)
+        all_stores = registry.list_all()
 
-            if all_stores:
-                # Use first available area/site
-                (area, site), store_id = list(all_stores.items())[0]
-                print(f"\n-> Auto-detected: {area} / {site}")
-            else:
-                area = area or "unknown"
-                site = site or "unknown"
-        except Exception as e:
-            print(f"Warning: Could not load registry: {e}")
-            area = area or "unknown"
-            site = site or "unknown"
+        if not all_stores:
+            print(f"\n❌ No stores found in registry.")
+            print("Please run main_upload.py first to create and upload to a store.")
+            sys.exit(1)
 
-    # Load RAG context from chunks
-    print(f"\n-> Loading content from: {chunks_dir}")
-    context, chunk_files = load_chunks(chunks_dir)
 
-    if not context:
-        print(f"❌ No content found in {chunks_dir}")
-        print("Please run main_upload.py first to create chunks.")
+        # If area/site not specified, use first available
+        if not area or not site:
+            (area, site), store_id = list(all_stores.items())[0]
+            print(f"\n-> Auto-detected: {area} / {site}")
+            print(f"-> Store ID: {store_id}")
+        else:
+            # Look up specific area/site
+            store_id = registry.get_store(area, site)
+            if not store_id:
+                print(f"\n❌ No store found for {area}/{site}")
+                print(f"Available stores:")
+                for (a, s), sid in all_stores.items():
+                    print(f"  - {a}/{s}: {sid}")
+                sys.exit(1)
+            print(f"\n-> Using store: {area} / {site}")
+            print(f"-> Store ID: {store_id}")
+
+    except Exception as e:
+        print(f"\n❌ Error loading registry: {e}")
+        print("Please run main_upload.py first to create and upload to a store.")
         sys.exit(1)
-
-    print(f"✓ Loaded {len(context):,} characters from {len(chunk_files)} chunks")
 
     # Connect to Gemini
     print("\n-> Connecting to Gemini...")
@@ -263,13 +265,42 @@ def main():
         print(f"❌ Error connecting to Gemini: {e}")
         sys.exit(1)
 
+    # Initialize store manager with store_id from registry
+    print("\n-> Initializing File Search Store...")
+    try:
+        store_manager = StoreManager(
+            client,
+            f"{area}_{site}_Tourism_RAG",
+            store_id=store_id
+        )
+        store_name = store_manager.store_name
+        print(f"✓ Connected to store: {store_name}")
+    except Exception as e:
+        print(f"❌ Error connecting to store: {e}")
+        sys.exit(1)
+
+    # Load chunks for the area/site (used as fallback)
+    chunks_dir = os.path.join(config.chunks_dir, area, site)
+    print(f"\n-> Loading chunks from: {chunks_dir}")
+
+    context, chunk_files = load_chunks(chunks_dir)
+
+    if not context:
+        print(f"\n❌ No chunks found for {area}/{site}")
+        print(f"Please run main_upload.py first to create chunks.")
+        sys.exit(1)
+
+    print(f"✓ Loaded {len(chunk_files)} chunk files ({len(context):,} characters)")
+
     # Initialize logger
     log_path = os.path.join(os.path.dirname(config.registry_path), "query_log.jsonl")
     logger = QueryLogger(log_path, area=area, site=site)
     print(f"✓ Query logger initialized: {log_path}")
 
     # Start RAG chat session
-    print(f"✓ Using model: {config.model_name} (temperature: {config.temperature})")
+    print(f"\n✓ Using model: {config.model_name} (temperature: {config.temperature})")
+    print(f"✓ RAG mode: Manual context loading")
+    print(f"✓ Store ID: {store_id} (for reference only)")
 
     run_rag_chat(
         client,
@@ -279,6 +310,7 @@ def main():
         area,
         site,
         logger,
+        store_name,
         config.temperature
     )
 

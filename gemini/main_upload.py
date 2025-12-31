@@ -44,7 +44,7 @@ from store_manager import StoreManager
 from store_registry import StoreRegistry
 from upload_tracker import UploadTracker
 from directory_parser import DirectoryParser
-from chunker import chunk_text_file
+from chunker import chunk_text_file, chunk_file_tokens
 
 
 def main():
@@ -137,7 +137,7 @@ def main():
     # Initialize tracking
     print(f"\n[Step {'2/4' if not args.dry_run else '2/3'}] Checking upload history...")
 
-    tracker = UploadTracker(config.upload_tracking_path)
+    tracker = a place to eat (config.upload_tracking_path)
 
     # Connect to Gemini (skip in dry-run mode)
     if not args.dry_run:
@@ -188,10 +188,16 @@ def main():
             if args.dry_run:
                 print(f"   -> Would upload {len(chunk_files)} files directly (no chunking)")
         else:
-            if args.dry_run:
-                print(f"   -> Would chunk files into {config.chunk_size} character chunks")
+            # Determine chunking method
+            if config.use_token_chunking:
+                chunk_info = f"{config.chunk_tokens} tokens with {int(config.chunk_overlap_percent * 100)}% overlap"
             else:
-                print(f"   -> Chunking files...")
+                chunk_info = f"{config.chunk_size} characters"
+
+            if args.dry_run:
+                print(f"   -> Would chunk files into {chunk_info}")
+            else:
+                print(f"   -> Chunking files ({chunk_info})...")
 
             chunk_files = []
 
@@ -207,19 +213,34 @@ def main():
                 file_id = os.path.splitext(os.path.basename(file_path))[0]
 
                 if not args.dry_run:
-                    chunks = chunk_text_file(
-                        file_path,
-                        file_id,
-                        chunk_size=config.chunk_size,
-                        output_dir=area_site_chunks_dir
-                    )
+                    # Use token-based or character-based chunking
+                    if config.use_token_chunking:
+                        chunks = chunk_file_tokens(
+                            file_path,
+                            file_id,
+                            chunk_tokens=config.chunk_tokens,
+                            overlap_percent=config.chunk_overlap_percent,
+                            output_dir=area_site_chunks_dir
+                        )
+                    else:
+                        chunks = chunk_text_file(
+                            file_path,
+                            file_id,
+                            chunk_size=config.chunk_size,
+                            output_dir=area_site_chunks_dir
+                        )
                     chunk_files.extend(chunks)
                 else:
                     # Estimate number of chunks for dry run
                     try:
                         from file_parser import parse_file
                         content = parse_file(file_path)
-                        est_chunks = max(1, len(content) // config.chunk_size)
+                        if config.use_token_chunking:
+                            # Estimate: ~4 chars per token
+                            est_tokens = len(content) // 4
+                            est_chunks = max(1, est_tokens // config.chunk_tokens)
+                        else:
+                            est_chunks = max(1, len(content) // config.chunk_size)
                         chunk_files.extend([f"chunk_{i}" for i in range(est_chunks)])
                     except:
                         chunk_files.append("chunk_1")

@@ -17,7 +17,12 @@ gemini_rag:
 
   temperature: 0.7
 
-  # Chunking settings
+  # Chunking settings (token-based)
+  use_token_chunking: true  # Use token-based chunking (recommended)
+  chunk_tokens: 400  # tokens per chunk (300-500 recommended)
+  chunk_overlap_percent: 0.15  # 15% overlap (0.10-0.20 recommended)
+
+  # Legacy character-based chunking (used if use_token_chunking: false)
   chunk_size: 1000  # characters per chunk
 
   # Upload settings

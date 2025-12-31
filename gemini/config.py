@@ -44,7 +44,10 @@ class GeminiConfig:
     store_display_name: str = "Tourism_RAG_Store"
 
     # Chunking Configuration
-    chunk_size: int = 1000
+    use_token_chunking: bool = True
+    chunk_tokens: int = 400
+    chunk_overlap_percent: float = 0.15
+    chunk_size: int = 1000  # Legacy character-based
 
     # Model Configuration
     model_name: str = "gemini-1.5-pro"
@@ -108,6 +111,9 @@ class GeminiConfig:
             app_name=app_config.get('name', 'Tourism Guide Assistant'),
             app_type=app_config.get('type', 'museum_tourism'),
             language=app_config.get('language', 'English'),
+            use_token_chunking=gemini_config.get('use_token_chunking', True),
+            chunk_tokens=gemini_config.get('chunk_tokens', 400),
+            chunk_overlap_percent=gemini_config.get('chunk_overlap_percent', 0.15),
             chunk_size=gemini_config.get('chunk_size', 1000),
             model_name=gemini_config.get('model', 'gemini-1.5-pro'),
             temperature=gemini_config.get('temperature', 0.7),

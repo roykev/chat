@@ -1,5 +1,16 @@
-google-genai>=1.0.0
-pyyaml>=6.0
-python-docx>=0.8.11
-PyPDF2>=3.0.0
-markdown>=3.4.0
+# Tourism Guide RAG Chat - Dependencies
+# Python 3.10+ required
+
+# Google Generative AI SDK for Gemini
+google-generativeai>=0.8.0
+
+# YAML configuration parsing
+PyYAML>=6.0.1
+
+# Token counting for chunking
+tiktoken>=0.5.0
+
+# Optional: Document parsing (if needed for PDF/DOCX support)
+# Uncomment if you need to parse these file types
+# PyPDF2>=3.0.0
+# python-docx>=1.1.0
