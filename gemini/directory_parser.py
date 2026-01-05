@@ -46,24 +46,40 @@ class DirectoryParser:
         result = {}
 
         # Walk through area directories
-        for area_name in os.listdir(self.content_root):
+        print(f"   Scanning content root: {self.content_root}")
+        areas = os.listdir(self.content_root)
+        print(f"   Found {len(areas)} potential areas")
+
+        for area_name in areas:
             area_path = os.path.join(self.content_root, area_name)
 
             if not os.path.isdir(area_path):
+                print(f"   Skipping non-directory: {area_name}")
                 continue
 
+            print(f"   Scanning area: {area_name}")
+
             # Walk through site directories within area
-            for site_name in os.listdir(area_path):
+            sites = os.listdir(area_path)
+            print(f"     Found {len(sites)} potential sites")
+
+            for site_name in sites:
                 site_path = os.path.join(area_path, site_name)
 
                 if not os.path.isdir(site_path):
+                    print(f"     Skipping non-directory: {site_name}")
                     continue
+
+                print(f"     Scanning site: {site_name}")
 
                 # Collect supported files from this site
                 files = self._collect_files(site_path)
 
                 if files:
+                    print(f"     Found {len(files)} supported files")
                     result[(area_name, site_name)] = files
+                else:
+                    print(f"     No supported files found")
 
         return result
 

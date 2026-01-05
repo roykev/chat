@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import List, Optional
 
 import yaml
-from utils import load_env_file
+
+from gemini.utils import load_env_file
 
 
 def find_config_file() -> str:

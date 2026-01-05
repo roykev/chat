@@ -9,7 +9,7 @@ import os
 import unicodedata
 from typing import List, Optional
 
-from file_parser import parse_file
+from gemini.file_parser import parse_file
 
 try:
     import tiktoken
@@ -82,8 +82,10 @@ def chunk_text_file(
     safe_file_id = sanitize_filename(file_id)
 
     # Parse the file to extract text
+    print(f"      Parsing file: {os.path.basename(file_path)}")
     try:
         content = parse_file(file_path)
+        print(f"      Extracted {len(content)} characters")
     except ValueError as e:
         print(f"   Warning: {e}")
         return []
@@ -93,6 +95,7 @@ def chunk_text_file(
         return []
 
     # Create output directory
+    print(f"      Creating output directory: {output_dir}")
     os.makedirs(output_dir, exist_ok=True)
 
     # Split into chunks
@@ -264,14 +267,20 @@ def chunk_text_tokens(
     overlap_tokens = int(chunk_tokens * overlap_percent)
 
     # Tokenize the entire text
+    print(f"        Tokenizing text...")
     tokens = encoding.encode(text)
     total_tokens = len(tokens)
+    print(
+        f"        Text has {total_tokens} tokens, will create ~{(total_tokens // chunk_tokens) + 1} chunks"
+    )
 
     chunks = []
     chunk_num = 0
     start_idx = 0
 
     while start_idx < total_tokens:
+        if chunk_num % 10 == 0 and chunk_num > 0:
+            print(f"        Created {chunk_num} chunks so far...")
         # Calculate end index
         end_idx = min(start_idx + chunk_tokens, total_tokens)
 
@@ -322,11 +331,23 @@ def chunk_text_tokens(
 
         chunks.append(chunk_filepath)
 
-        # Move to next chunk with overlap
-        start_idx = end_idx - overlap_tokens
-        if start_idx >= total_tokens:
+        # If we just processed the last chunk, we're done
+        if end_idx >= total_tokens:
             break
 
+        # Move to next chunk with overlap
+        new_start_idx = end_idx - overlap_tokens
+
+        # Prevent infinite loop - ensure we're making progress
+        # If overlap would keep us in same position, just move forward
+        if new_start_idx <= start_idx:
+            # This happens when end_idx - overlap_tokens <= start_idx
+            # Just break here as we've reached the end
+            break
+
+        start_idx = new_start_idx
+
+    print(f"        Finished creating {len(chunks)} chunks")
     return chunks
 
 
@@ -354,8 +375,10 @@ def chunk_file_tokens(
     safe_file_id = sanitize_filename(file_id)
 
     # Parse file
+    print(f"      Parsing file: {os.path.basename(file_path)}")
     try:
         content = parse_file(file_path)
+        print(f"      Extracted {len(content)} characters")
     except ValueError as e:
         print(f"   Warning: {e}")
         return []
@@ -364,6 +387,11 @@ def chunk_file_tokens(
         print(f"   Warning: No text content extracted from {file_path}")
         return []
 
-    return chunk_text_tokens(
+    print(
+        f"      Creating chunks ({chunk_tokens} tokens, {int(overlap_percent*100)}% overlap)..."
+    )
+    result = chunk_text_tokens(
         content, file_id, chunk_tokens, overlap_percent, output_dir
     )
+    print(f"      Created {len(result)} chunks")
+    return result

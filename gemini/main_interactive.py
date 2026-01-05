@@ -15,6 +15,15 @@ import os
 import sys
 import time
 
+# Add parent directory to path if running as script
+if __name__ == "__main__":
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(script_dir)
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+    # Change to parent directory so relative paths in config work
+    os.chdir(parent_dir)
+
 # Set UTF-8 encoding
 if sys.stdout.encoding != "UTF-8":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -27,10 +36,11 @@ except:
     pass
 
 import google.genai as genai
-from config import GeminiConfig
 from google.genai import types
-from query_logger import QueryLogger
-from store_registry import StoreRegistry
+
+from gemini.config import GeminiConfig
+from gemini.query_logger import QueryLogger
+from gemini.store_registry import StoreRegistry
 
 
 def load_chunks(chunks_dir: str) -> tuple[str, list[str]]:
@@ -86,17 +96,14 @@ def run_rag_chat(
         store_id: Gemini store ID
         temperature: Generation temperature
     """
-    # Get document count from store
+    # Get document count from uploaded files
     doc_count = 0
     try:
-        store = client.file_search_stores.get(name=store_id)
-        # List files in the store to count them
-        files_in_store = list(
-            client.file_search_stores.list_files(file_search_store_name=store_id)
-        )
-        doc_count = len(files_in_store)
+        # Count files uploaded to Files API
+        files_list = list(client.files.list())
+        doc_count = len(files_list)
     except Exception as e:
-        print(f"Warning: Could not get document count: {e}")
+        print(f"Warning: Could not get file count: {e}")
 
     print("\n" + "=" * 70)
     print("🗺️  Tourism Guide - Interactive Q&A")
@@ -204,6 +211,10 @@ def main():
     parser.add_argument(
         "--model", help="Gemini model to use (default from config.yaml)"
     )
+    parser.add_argument(
+        "--test",
+        help="Non-interactive test mode: provide a single question to test",
+    )
 
     args = parser.parse_args()
 
@@ -291,16 +302,73 @@ def main():
     logger = QueryLogger(log_path, area=area, site=site)
     print(f"✓ Query logger initialized: {log_path}")
 
-    # Start RAG chat session
-    print(f"✓ Using model: {config.model_name} (temperature: {config.temperature})")
+    # Ensure model name has models/ prefix
+    model_name = config.model_name
+    if not model_name.startswith("models/"):
+        model_name = f"models/{model_name}"
 
-    # Note: Skipping local chunk loading - using Gemini store directly
-    context = ""  # Not used when querying store
-    chunk_files = []  # Not used when querying store
+    print(f"✓ Using model: {model_name} (temperature: {config.temperature})")
 
+    # Load chunks from disk for context
+    area_site_chunks_dir = os.path.join(chunks_dir, area, site)
+    context, chunk_files = load_chunks(area_site_chunks_dir)
+
+    if not context:
+        print(f"\n⚠️  Warning: No chunks found in {area_site_chunks_dir}")
+        print("    The assistant will have no context to answer questions.")
+    else:
+        print(f"✓ Loaded {len(chunk_files)} chunks ({len(context)} characters)")
+
+    # Test mode - single question
+    if args.test:
+        print("\n" + "=" * 70)
+        print("🧪 TEST MODE - Single Question")
+        print("=" * 70)
+        print(f"Question: {args.test}\n")
+
+        system_instruction = f"""You are a helpful tourism guide assistant for the {area} region,
+specifically for the {site} area.
+
+Use ONLY the following source material to answer questions. If the answer is not in the source material,
+say so honestly. Always respond in the same language as the question.
+
+SOURCE MATERIAL:
+{context}
+
+Answer questions based only on this source material."""
+
+        try:
+            import time
+
+            start_time = time.time()
+
+            response = client.models.generate_content(
+                model=model_name,
+                contents=args.test,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=config.temperature,
+                ),
+            )
+
+            response_time = time.time() - start_time
+
+            print("Answer:")
+            print("-" * 70)
+            print(response.text)
+            print("-" * 70)
+            print(f"Response time: {response_time:.2f}s")
+
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            sys.exit(1)
+
+        sys.exit(0)
+
+    # Interactive mode
     run_rag_chat(
         client,
-        config.model_name,
+        model_name,
         context,
         chunk_files,
         area,

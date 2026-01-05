@@ -25,6 +25,15 @@ import locale
 import os
 import sys
 
+# Add parent directory to path if running as script
+if __name__ == "__main__":
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(script_dir)
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+    # Change to parent directory so relative paths in config work
+    os.chdir(parent_dir)
+
 # Set UTF-8 encoding for the environment
 if sys.stdout.encoding != "UTF-8":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -38,19 +47,22 @@ except:
     pass
 
 import google.genai as genai
-from chunker import chunk_file_tokens, chunk_text_file
-from config import GeminiConfig
-from directory_parser import DirectoryParser
-from store_manager import StoreManager
-from store_registry import StoreRegistry
-from upload_tracker import UploadTracker
+
+from gemini.chunker import chunk_file_tokens, chunk_text_file
+from gemini.config import GeminiConfig
+from gemini.directory_parser import DirectoryParser
+from gemini.store_manager import StoreManager
+from gemini.store_registry import StoreRegistry
+from gemini.upload_tracker import UploadTracker
 
 
 def main():
+    print("DEBUG: Starting main_upload.py")
     parser = argparse.ArgumentParser(
         description="Upload tourism/museum content to Gemini RAG system"
     )
 
+    print("DEBUG: Created argument parser")
     parser.add_argument("--area", help="Specific area to upload (optional)")
     parser.add_argument("--site", help="Specific site to upload (requires --area)")
     parser.add_argument(
@@ -67,7 +79,9 @@ def main():
         help="Preview what will be uploaded without actually uploading",
     )
 
+    print("DEBUG: Parsing arguments")
     args = parser.parse_args()
+    print(f"DEBUG: Arguments parsed: dry_run={args.dry_run}")
 
     # Validate arguments
     if args.site and not args.area:
@@ -79,8 +93,10 @@ def main():
     print("📤 Tourism Guide - Content Upload System")
     print("=" * 70)
 
+    print("DEBUG: Loading configuration")
     try:
         config = GeminiConfig.from_yaml()
+        print(f"DEBUG: Config loaded successfully")
         print(f"\n✓ Configuration loaded")
         print(f"  Content root: {config.content_root}")
         print(f"  Chunks directory: {config.chunks_dir}")

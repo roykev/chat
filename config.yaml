@@ -1,7 +1,7 @@
 # Tourism/Museum App Configuration
 
 # Content directory structure (area/site hierarchy)
-content_root: "/home/roy/FS/Dropbox/WORK/Ideas/chat/demo_data/"
+content_root: "data/locations"
 
 # App configuration
 app:
@@ -12,8 +12,9 @@ app:
 # Gemini RAG configuration
 gemini_rag:
   # Model settings
-#  model: "models/gemini-2.5-pro"
-  model: "gemini-2.0-flash-exp"  # Gemini model to use for RAG queries
+  model: "gemini-2.0-flash"  # Gemini model to use for RAG queries (stable)
+#  model: "gemini-2.0-flash-exp"  # Experimental - lower quotas
+#  model: "gemini-2.5-flash"  # Latest stable
 
   temperature: 0.7
 
@@ -34,7 +35,7 @@ gemini_rag:
   upload_tracking_path: "gemini/upload_tracking.json"
 
   # Chunks will be stored as sibling to content_root
-  chunks_dir: "/home/roy/FS/Dropbox/WORK/Ideas/chat/content_chunks"
+  chunks_dir: "data/chunks"
 
   # Force re-upload all files (ignore tracking)
   force_reupload: false

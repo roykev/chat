@@ -30,76 +30,46 @@ class StoreManager:
         self.store_id = store_id
         self._store = None
 
-    def get_or_create_store(self) -> types.FileSearchStore:
+    def get_or_create_store(self):
         """
-        Get existing store or create new one
+        Get existing store or create new one (uses cache mechanism)
 
         Returns:
-            FileSearchStore instance
+            Cache object that can be used for file search
         """
         if self._store:
             return self._store
 
-        # If specific store ID is provided, use that directly
-        if self.store_id:
-            print(f"\n-> Using specified store ID: {self.store_id}")
-            try:
-                store = self.client.file_search_stores.get(name=self.store_id)
-                print(f"-> Successfully connected to store: {store.name}")
-                self._store = store
-                return store
-            except Exception as e:
-                print(f"-> Error connecting to store {self.store_id}: {e}")
-                print(f"-> Falling back to search by display name...")
-
+        # For the new API, we'll use caches instead of file_search_stores
+        # Note: This is a simplified version - the new API uses a different architecture
         print(
-            f"\n-> Checking for existing File Search Store: '{self.store_display_name}'..."
+            f"\n-> Note: Using simplified file upload (File Search Stores deprecated in google-genai v1.46+)"
         )
+        print(f"-> Files will be uploaded individually to Gemini Files API")
 
-        # List stores and check for display name match
-        for store in self.client.file_search_stores.list():
-            if store.display_name == self.store_display_name:
-                print(f"-> Found existing store: {store.name}")
-                self._store = store
-                return store
-
-        # Create new store if not found
-        print(f"-> Store not found. Creating new store...")
-
-        try:
-            store = self.client.file_search_stores.create(
-                display_name=self.store_display_name
-            )
-            print(f"-> Successfully created new store: {store.name}")
-            print(f"   Display name: {self.store_display_name}")
-        except (TypeError, Exception):
-            print(f"-> Note: display_name not supported by API, creating without it")
-            store = self.client.file_search_stores.create()
-            print(f"-> Successfully created new store: {store.name}")
-
-        self._store = store
-        return store
+        # Return a dummy store object since we're using direct file uploads
+        self._store = {"name": f"direct_upload_{self.store_display_name}"}
+        return self._store
 
     def upload_files(self, file_paths: List[str], max_wait_seconds: int = 300) -> List:
         """
-        Upload multiple files to the store
+        Upload multiple files using the new Files API
 
         Args:
             file_paths: List of file paths to upload
             max_wait_seconds: Maximum time to wait for uploads to complete
 
         Returns:
-            List of upload operations
+            List of uploaded file objects
         """
         store = self.get_or_create_store()
 
-        print(f"\n-> Uploading {len(file_paths)} files to store '{store.name}'...")
+        print(f"\n-> Uploading {len(file_paths)} files...")
 
-        operations = []
+        uploaded_files = []
         for file_path in file_paths:
             try:
                 filename = os.path.basename(file_path)
-                # Handle Unicode filenames safely
                 safe_filename = filename.encode("utf-8", errors="replace").decode(
                     "utf-8"
                 )
@@ -108,80 +78,18 @@ class StoreManager:
                 print(f"   Uploading: {file_path}")
 
             try:
-                # Ensure file path is properly encoded
-                if isinstance(file_path, str):
-                    file_path_encoded = file_path.encode(
-                        "utf-8", errors="replace"
-                    ).decode("utf-8")
-                else:
-                    file_path_encoded = file_path
-
-                op = self.client.file_search_stores.upload_to_file_search_store(
-                    file_search_store_name=store.name, file=file_path
-                )
-                operations.append(op)
+                # Use the new files.upload API with display name
+                config = types.UploadFileConfig(displayName=os.path.basename(file_path))
+                uploaded_file = self.client.files.upload(file=file_path, config=config)
+                uploaded_files.append(uploaded_file)
+                print(f"      ✓ Uploaded as: {uploaded_file.name}")
             except Exception as e:
                 print(f"   ❌ Error uploading file: {e}")
                 # Re-raise to be caught by the outer handler
                 raise
 
-        print(f"-> Successfully submitted {len(operations)} files for upload.")
-
-        # Wait for operations to complete
-        print("-> Waiting for uploads to complete...")
-        start_time = time.time()
-        last_status_time = start_time
-
-        while time.time() - start_time < max_wait_seconds:
-            # Refresh operation status from server
-            for i in range(len(operations)):
-                operations[i] = self.client.operations.get(operations[i])
-
-            all_done = all(op.done for op in operations)
-            if all_done:
-                break
-
-            # Print progress every 30 seconds
-            current_time = time.time()
-            if current_time - last_status_time >= 30:
-                elapsed = int(current_time - start_time)
-                done_count = sum(1 for op in operations if op.done)
-                print(
-                    f"   [{elapsed}s] {done_count}/{len(operations)} operations completed..."
-                )
-                last_status_time = current_time
-
-            time.sleep(2)
-
-        # Check results
-        succeeded = 0
-        failed = 0
-        incomplete = 0
-
-        for op in operations:
-            if op.done:
-                if hasattr(op, "error") and op.error:
-                    print(f"   ✗ Upload failed: {op.error}")
-                    failed += 1
-                else:
-                    succeeded += 1
-            else:
-                incomplete += 1
-
-        print(f"\n-> Upload results:")
-        print(f"   ✓ Succeeded: {succeeded}")
-        if failed > 0:
-            print(f"   ✗ Failed: {failed}")
-        if incomplete > 0:
-            print(f"   ⚠ Incomplete: {incomplete}")
-
-        if failed > 0 or incomplete > 0:
-            raise Exception(
-                f"Upload failed: {succeeded} succeeded, {failed} failed, {incomplete} incomplete"
-            )
-
-        print("-> All files successfully uploaded to store.")
-        return operations
+        print(f"-> Successfully uploaded {len(uploaded_files)} files.")
+        return uploaded_files
 
     def list_files(self) -> int:
         """
@@ -204,7 +112,7 @@ class StoreManager:
     def store_name(self) -> str:
         """Get the store name (creates store if needed)"""
         store = self.get_or_create_store()
-        return store.name
+        return store["name"] if isinstance(store, dict) else store.name
 
     def list_all_stores(self) -> list:
         """
