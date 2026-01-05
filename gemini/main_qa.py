@@ -187,48 +187,53 @@ def main():
 
         all_stores = st.session_state.registry.list_all()
         if not all_stores:
-            st.error("No stores found in registry. Run upload first.")
-            st.stop()
+            st.warning(
+                "No content uploaded yet. Use the 'Manage Content' tab to upload."
+            )
+            area = None
+            site = None
+        else:
+            # Create dropdown options
+            location_options = {
+                f"{area} / {site}": (area, site) for (area, site) in all_stores.keys()
+            }
+            selected_location = st.selectbox(
+                "Select Area / Site",
+                options=list(location_options.keys()),
+                index=0,
+            )
 
-        # Create dropdown options
-        location_options = {
-            f"{area} / {site}": (area, site) for (area, site) in all_stores.keys()
-        }
-        selected_location = st.selectbox(
-            "Select Area / Site",
-            options=list(location_options.keys()),
-            index=0,
-        )
+            # Update selected area/site
+            area, site = location_options[selected_location]
+            if (
+                area != st.session_state.selected_area
+                or site != st.session_state.selected_site
+            ):
+                st.session_state.selected_area = area
+                st.session_state.selected_site = site
+                st.session_state.messages = []  # Clear chat history on location change
 
-        # Update selected area/site
-        area, site = location_options[selected_location]
-        if (
-            area != st.session_state.selected_area
-            or site != st.session_state.selected_site
-        ):
-            st.session_state.selected_area = area
-            st.session_state.selected_site = site
-            st.session_state.messages = []  # Clear chat history on location change
+                # Load chunks for selected location
+                chunks_dir = os.path.join(
+                    st.session_state.config.chunks_dir, area, site
+                )
+                context, chunk_files = load_chunks(chunks_dir)
+                st.session_state.context = context
+                st.session_state.chunk_files = chunk_files
 
-            # Load chunks for selected location
-            chunks_dir = os.path.join(st.session_state.config.chunks_dir, area, site)
-            context, chunk_files = load_chunks(chunks_dir)
-            st.session_state.context = context
-            st.session_state.chunk_files = chunk_files
+            # Display location info
+            store_id = st.session_state.registry.get_store(area, site)
+            registry_data = st.session_state.registry.registry.get(f"{area}:{site}", {})
+            metadata = registry_data.get("metadata", {})
 
-        # Display location info
-        store_id = st.session_state.registry.get_store(area, site)
-        registry_data = st.session_state.registry.registry.get(f"{area}:{site}", {})
-        metadata = registry_data.get("metadata", {})
-
-        st.info(
-            f"""
-            **Area:** {area}
-            **Site:** {site}
-            **Documents:** {metadata.get('file_count', 'N/A')}
-            **Chunks:** {len(st.session_state.chunk_files)}
-            """
-        )
+            st.info(
+                f"""
+                **Area:** {area}
+                **Site:** {site}
+                **Documents:** {metadata.get('file_count', 'N/A')}
+                **Chunks:** {len(st.session_state.chunk_files)}
+                """
+            )
 
         st.markdown("---")
 
@@ -279,65 +284,70 @@ def main():
 
     # Main content area
     st.title("🗺️ Tourism Guide Q&A")
-    st.markdown(f"**Current Location:** {area} / {site}")
+
+    if area and site:
+        st.markdown(f"**Current Location:** {area} / {site}")
 
     # Create tabs
     tab_chat, tab_manage = st.tabs(["💬 Chat", "⚙️ Manage Content"])
 
     # ===== CHAT TAB =====
     with tab_chat:
-        # Check if context is loaded
-        if not st.session_state.context:
+        if not area or not site:
+            st.info(
+                "📤 No content available. Please upload content using the 'Manage Content' tab."
+            )
+        elif not st.session_state.context:
             st.warning(
                 f"⚠️ No content found for {area} / {site}. Please upload documents first."
             )
+        else:
+            # Display chat messages
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+                    if "time" in message:
+                        st.caption(f"⏱️ {message['time']:.2f}s")
 
-        # Display chat messages
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-                if "time" in message:
-                    st.caption(f"⏱️ {message['time']:.2f}s")
+            # Chat input
+            if question := st.chat_input("Ask a question about this location..."):
+                # Display user message
+                st.session_state.messages.append({"role": "user", "content": question})
+                with st.chat_message("user"):
+                    st.markdown(question)
 
-        # Chat input
-        if question := st.chat_input("Ask a question about this location..."):
-            # Display user message
-            st.session_state.messages.append({"role": "user", "content": question})
-            with st.chat_message("user"):
-                st.markdown(question)
+                # Get and display assistant response
+                with st.chat_message("assistant"):
+                    with st.spinner("Searching content..."):
+                        try:
+                            answer, response_time = get_response(question, area, site)
 
-            # Get and display assistant response
-            with st.chat_message("assistant"):
-                with st.spinner("Searching content..."):
-                    try:
-                        answer, response_time = get_response(question, area, site)
+                            st.markdown(answer)
+                            st.caption(f"⏱️ {response_time:.2f}s")
 
-                        st.markdown(answer)
-                        st.caption(f"⏱️ {response_time:.2f}s")
+                            # Save to messages
+                            st.session_state.messages.append(
+                                {
+                                    "role": "assistant",
+                                    "content": answer,
+                                    "time": response_time,
+                                }
+                            )
 
-                        # Save to messages
-                        st.session_state.messages.append(
-                            {
-                                "role": "assistant",
-                                "content": answer,
-                                "time": response_time,
-                            }
-                        )
+                            # Log the query
+                            st.session_state.logger.area = area
+                            st.session_state.logger.site = site
+                            st.session_state.logger.log_query(
+                                query=question,
+                                answer=answer,
+                                model=config.model_name,
+                                context_chars=len(st.session_state.context),
+                                response_time_seconds=response_time,
+                                chunks_used=st.session_state.chunk_files,
+                            )
 
-                        # Log the query
-                        st.session_state.logger.area = area
-                        st.session_state.logger.site = site
-                        st.session_state.logger.log_query(
-                            query=question,
-                            answer=answer,
-                            model=config.model_name,
-                            context_chars=len(st.session_state.context),
-                            response_time_seconds=response_time,
-                            chunks_used=st.session_state.chunk_files,
-                        )
-
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
 
     # ===== MANAGE CONTENT TAB =====
     with tab_manage:
