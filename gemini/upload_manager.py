@@ -142,39 +142,67 @@ class UploadManager:
         area: Optional[str] = None,
         site: Optional[str] = None,
         force: bool = False,
+        flat_folder: bool = False,
     ) -> Tuple[bool, str, Dict]:
         """
         Upload content for specific area/site or all content
 
         Args:
-            area: Specific area to upload (None for all)
-            site: Specific site to upload (requires area)
+            area: Specific area to upload (None for all, required if flat_folder=True)
+            site: Specific site to upload (requires area, required if flat_folder=True)
             force: Force re-upload even if already uploaded
+            flat_folder: If True, treat content_root as a flat folder containing files directly
 
         Returns:
             (success: bool, message: str, stats: dict)
         """
         try:
-            # Parse directory structure
-            parser = DirectoryParser(
-                self.config.content_root, self.config.supported_formats
-            )
-            structure = parser.parse_directory_structure()
-
-            # Filter by area/site if specified
-            if area:
-                structure = {
-                    (a, s): files
-                    for (a, s), files in structure.items()
-                    if a == area and (not site or s == site)
-                }
-
-                if not structure:
+            if flat_folder:
+                # Handle flat folder upload
+                if not area or not site:
                     return (
                         False,
-                        f"No content found for {area}/{site or 'any site'}",
+                        "Area and site are required for flat folder uploads",
                         {},
                     )
+
+                # Get all supported files from the folder
+                import glob
+
+                files = []
+                for ext in self.config.supported_formats:
+                    pattern = os.path.join(self.config.content_root, f"*{ext}")
+                    files.extend(glob.glob(pattern))
+
+                if not files:
+                    return (
+                        False,
+                        f"No supported files found in {self.config.content_root}",
+                        {},
+                    )
+
+                structure = {(area, site): files}
+            else:
+                # Parse directory structure
+                parser = DirectoryParser(
+                    self.config.content_root, self.config.supported_formats
+                )
+                structure = parser.parse_directory_structure()
+
+                # Filter by area/site if specified
+                if area:
+                    structure = {
+                        (a, s): files
+                        for (a, s), files in structure.items()
+                        if a == area and (not site or s == site)
+                    }
+
+                    if not structure:
+                        return (
+                            False,
+                            f"No content found for {area}/{site or 'any site'}",
+                            {},
+                        )
 
             stats = {
                 "total_files": 0,

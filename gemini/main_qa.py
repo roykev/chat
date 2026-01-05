@@ -409,56 +409,195 @@ def main():
         # Upload new content section
         st.subheader("📤 Upload Content")
 
-        # Get available locations from content directory
-        available_locations = st.session_state.upload_manager.get_available_locations()
+        # Two upload options
+        upload_tabs = st.tabs(["📁 From Folder Path", "📂 From Existing Content"])
 
-        if not available_locations:
-            st.warning(
-                f"No content found in {st.session_state.config.content_root}. Add files first."
-            )
-        else:
-            upload_col1, upload_col2, upload_col3, upload_col4 = st.columns(
-                [2, 2, 1, 1]
-            )
+        # Tab 1: Upload from folder path
+        with upload_tabs[0]:
+            st.write("Upload files from a specific folder on your system")
 
-            with upload_col1:
-                upload_option = st.radio(
-                    "Upload Scope",
-                    ["All Locations", "Specific Location"],
-                    key="upload_scope",
+            col1, col2 = st.columns(2)
+
+            with col1:
+                folder_path = st.text_input(
+                    "Folder Path",
+                    placeholder="e.g., /path/to/your/content",
+                    key="folder_path_input",
+                    help="Enter the absolute path to the folder containing your content files",
                 )
 
-            with upload_col2:
-                if upload_option == "Specific Location":
-                    location_strs = [f"{a} / {s}" for a, s in available_locations]
-                    selected_loc = st.selectbox(
-                        "Select Location", options=location_strs, key="upload_location"
-                    )
-                    upload_area, upload_site = selected_loc.split(" / ")
-                else:
-                    upload_area, upload_site = None, None
+            with col2:
+                st.write("")  # Spacing for alignment
+                st.write("")
+                browse_help = st.button(
+                    "💡 How to find path?",
+                    help="On Mac: right-click folder → hold Option → Copy as Pathname\nOn Linux: right-click → Properties → Location\nOn Windows: Shift+right-click → Copy as path",
+                )
 
-            with upload_col3:
-                force_upload = st.checkbox("Force Re-upload", key="force_upload")
+            if browse_help:
+                st.info(
+                    """
+                    **Finding your folder path:**
 
-            with upload_col4:
-                st.write("")  # Spacing
-                st.write("")  # Spacing
-                if st.button("📤 Upload", type="primary"):
-                    with st.spinner("Uploading content..."):
-                        success, message, stats = (
-                            st.session_state.upload_manager.upload_content(
-                                area=upload_area, site=upload_site, force=force_upload
-                            )
+                    - **Mac**: Right-click folder → Hold Option key → Select "Copy ... as Pathname"
+                    - **Linux**: Right-click folder → Properties → Copy the Location
+                    - **Windows**: Shift + Right-click folder → Select "Copy as path"
+                    """
+                )
+
+            col3, col4 = st.columns(2)
+
+            with col3:
+                location_type = st.radio(
+                    "Location Type",
+                    ["Use Existing Location", "Create New Location"],
+                    key="location_type",
+                )
+
+            with col4:
+                if location_type == "Use Existing Location":
+                    # Get existing locations
+                    all_stores = st.session_state.registry.list_all()
+                    if all_stores:
+                        location_strs = [f"{a} / {s}" for (a, s) in all_stores.keys()]
+                        selected_existing = st.selectbox(
+                            "Select Location",
+                            options=location_strs,
+                            key="existing_location_select",
                         )
+                        upload_area, upload_site = selected_existing.split(" / ")
+                    else:
+                        st.warning("No existing locations. Please create a new one.")
+                        upload_area = None
+                        upload_site = None
+                else:
+                    # Create new location
+                    upload_area = st.text_input(
+                        "Area Name",
+                        placeholder="e.g., tel_aviv_district",
+                        key="new_area_input",
+                        help="Use lowercase with underscores (e.g., tel_aviv_district)",
+                    )
+                    upload_site = st.text_input(
+                        "Site Name",
+                        placeholder="e.g., jaffa_port",
+                        key="new_site_input",
+                        help="Use lowercase with underscores (e.g., jaffa_port)",
+                    )
 
-                        if success:
-                            st.success(message)
-                            if stats:
-                                st.json(stats)
-                            st.rerun()
-                        else:
-                            st.error(message)
+            force_upload_path = st.checkbox(
+                "Force Re-upload (overwrite existing)",
+                key="force_upload_path",
+                help="Check this to re-upload files even if they haven't changed",
+            )
+
+            if st.button(
+                "📤 Upload from Folder", type="primary", key="upload_folder_btn"
+            ):
+                # Validate inputs
+                if not folder_path:
+                    st.error("Please enter a folder path")
+                elif not upload_area or not upload_site:
+                    st.error("Please specify both area and site names")
+                elif not os.path.exists(folder_path):
+                    st.error(f"Folder not found: {folder_path}")
+                elif not os.path.isdir(folder_path):
+                    st.error(f"Path is not a directory: {folder_path}")
+                else:
+                    with st.spinner(f"Uploading content from {folder_path}..."):
+                        # Temporarily set content_root to the specified folder
+                        original_root = st.session_state.config.content_root
+                        st.session_state.config.content_root = folder_path
+
+                        try:
+                            success, message, stats = (
+                                st.session_state.upload_manager.upload_content(
+                                    area=upload_area,
+                                    site=upload_site,
+                                    force=force_upload_path,
+                                    flat_folder=True,
+                                )
+                            )
+
+                            if success:
+                                st.success(message)
+                                if stats:
+                                    st.json(stats)
+                                st.rerun()
+                            else:
+                                st.error(message)
+                        finally:
+                            # Restore original content_root
+                            st.session_state.config.content_root = original_root
+
+        # Tab 2: Upload from existing content directory
+        with upload_tabs[1]:
+            st.write(
+                f"Upload files from the configured content directory: `{st.session_state.config.content_root}`"
+            )
+
+            # Get available locations from content directory
+            available_locations = (
+                st.session_state.upload_manager.get_available_locations()
+            )
+
+            if not available_locations:
+                st.warning(
+                    f"No content found in {st.session_state.config.content_root}. Use the 'From Folder Path' tab to upload from a different location."
+                )
+            else:
+                upload_col1, upload_col2, upload_col3, upload_col4 = st.columns(
+                    [2, 2, 1, 1]
+                )
+
+                with upload_col1:
+                    upload_option = st.radio(
+                        "Upload Scope",
+                        ["All Locations", "Specific Location"],
+                        key="upload_scope",
+                    )
+
+                with upload_col2:
+                    if upload_option == "Specific Location":
+                        location_strs = [f"{a} / {s}" for a, s in available_locations]
+                        selected_loc = st.selectbox(
+                            "Select Location",
+                            options=location_strs,
+                            key="upload_location",
+                        )
+                        upload_area_existing, upload_site_existing = selected_loc.split(
+                            " / "
+                        )
+                    else:
+                        upload_area_existing, upload_site_existing = None, None
+
+                with upload_col3:
+                    force_upload_existing = st.checkbox(
+                        "Force Re-upload", key="force_upload"
+                    )
+
+                with upload_col4:
+                    st.write("")  # Spacing
+                    st.write("")  # Spacing
+                    if st.button(
+                        "📤 Upload", type="primary", key="upload_existing_btn"
+                    ):
+                        with st.spinner("Uploading content..."):
+                            success, message, stats = (
+                                st.session_state.upload_manager.upload_content(
+                                    area=upload_area_existing,
+                                    site=upload_site_existing,
+                                    force=force_upload_existing,
+                                )
+                            )
+
+                            if success:
+                                st.success(message)
+                                if stats:
+                                    st.json(stats)
+                                st.rerun()
+                            else:
+                                st.error(message)
 
 
 if __name__ == "__main__":
