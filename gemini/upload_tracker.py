@@ -3,12 +3,12 @@ Upload Tracker - Tracks which files have been uploaded to avoid duplicates
 Maintains file hashes and modification times for incremental uploads
 """
 
+import hashlib
 import json
 import os
-import hashlib
-from typing import Dict, Set, Optional
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, Optional, Set
 
 
 class UploadTracker:
@@ -28,7 +28,7 @@ class UploadTracker:
         """Load tracking data from disk"""
         if os.path.exists(self.tracking_file):
             try:
-                with open(self.tracking_file, 'r', encoding='utf-8') as f:
+                with open(self.tracking_file, "r", encoding="utf-8") as f:
                     return json.load(f)
             except json.JSONDecodeError:
                 print(f"Warning: Could not parse {self.tracking_file}. Starting fresh.")
@@ -38,8 +38,8 @@ class UploadTracker:
     def _save_tracking(self):
         """Save tracking data to disk"""
         try:
-            os.makedirs(os.path.dirname(self.tracking_file) or '.', exist_ok=True)
-            with open(self.tracking_file, 'w', encoding='utf-8') as f:
+            os.makedirs(os.path.dirname(self.tracking_file) or ".", exist_ok=True)
+            with open(self.tracking_file, "w", encoding="utf-8") as f:
                 json.dump(self.tracking_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"-> Warning: Could not save tracking data: {e}")
@@ -82,23 +82,19 @@ class UploadTracker:
         current_mtime = self._get_file_mtime(file_path)
 
         # If modification time changed, file was updated
-        if stored_data.get('mtime') != current_mtime:
+        if stored_data.get("mtime") != current_mtime:
             return False
 
         # Optionally verify hash for extra safety
-        if 'hash' in stored_data:
+        if "hash" in stored_data:
             current_hash = self._calculate_file_hash(file_path)
-            if stored_data['hash'] != current_hash:
+            if stored_data["hash"] != current_hash:
                 return False
 
         return True
 
     def mark_file_uploaded(
-        self,
-        file_path: str,
-        area: str,
-        site: str,
-        chunk_path: Optional[str] = None
+        self, file_path: str, area: str, site: str, chunk_path: Optional[str] = None
     ):
         """
         Mark a file as uploaded
@@ -113,23 +109,19 @@ class UploadTracker:
         key = f"{area}:{site}:{rel_path}"
 
         self.tracking_data[key] = {
-            'file_path': file_path,
-            'area': area,
-            'site': site,
-            'mtime': self._get_file_mtime(file_path),
-            'hash': self._calculate_file_hash(file_path),
-            'uploaded_at': datetime.now().isoformat(),
-            'chunk_path': chunk_path
+            "file_path": file_path,
+            "area": area,
+            "site": site,
+            "mtime": self._get_file_mtime(file_path),
+            "hash": self._calculate_file_hash(file_path),
+            "uploaded_at": datetime.now().isoformat(),
+            "chunk_path": chunk_path,
         }
 
         self._save_tracking()
 
     def get_new_files(
-        self,
-        file_paths: list,
-        area: str,
-        site: str,
-        force: bool = False
+        self, file_paths: list, area: str, site: str, force: bool = False
     ) -> list:
         """
         Filter file list to only include new or modified files
@@ -172,13 +164,17 @@ class UploadTracker:
             print("-> Cleared all tracking data")
         elif site is None:
             # Clear all entries for this area
-            keys_to_remove = [k for k in self.tracking_data.keys() if k.startswith(f"{area}:")]
+            keys_to_remove = [
+                k for k in self.tracking_data.keys() if k.startswith(f"{area}:")
+            ]
             for key in keys_to_remove:
                 del self.tracking_data[key]
             print(f"-> Cleared tracking data for area: {area}")
         else:
             # Clear specific area/site
-            keys_to_remove = [k for k in self.tracking_data.keys() if k.startswith(f"{area}:{site}:")]
+            keys_to_remove = [
+                k for k in self.tracking_data.keys() if k.startswith(f"{area}:{site}:")
+            ]
             for key in keys_to_remove:
                 del self.tracking_data[key]
             print(f"-> Cleared tracking data for {area}:{site}")
@@ -193,7 +189,7 @@ class UploadTracker:
 
         areas = {}
         for key in self.tracking_data.keys():
-            area = key.split(':')[0]
+            area = key.split(":")[0]
             areas[area] = areas.get(area, 0) + 1
 
         print(f"\n=== Upload Tracking Statistics ===")

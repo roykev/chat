@@ -10,29 +10,27 @@ Usage:
 """
 
 import argparse
-import sys
-import os
-import time
 import locale
+import os
+import sys
+import time
 
 # Set UTF-8 encoding
-if sys.stdout.encoding != 'UTF-8':
-    sys.stdout.reconfigure(encoding='utf-8')
-if sys.stderr.encoding != 'UTF-8':
-    sys.stderr.reconfigure(encoding='utf-8')
+if sys.stdout.encoding != "UTF-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr.encoding != "UTF-8":
+    sys.stderr.reconfigure(encoding="utf-8")
 
 try:
-    locale.setlocale(locale.LC_ALL, '')
+    locale.setlocale(locale.LC_ALL, "")
 except:
     pass
 
 import google.genai as genai
-from google.genai import types
-
 from config import GeminiConfig
+from google.genai import types
 from query_logger import QueryLogger
 from store_registry import StoreRegistry
-from store_manager import StoreManager
 
 
 def load_chunks(chunks_dir: str) -> tuple[str, list[str]]:
@@ -50,10 +48,10 @@ def load_chunks(chunks_dir: str) -> tuple[str, list[str]]:
 
     for root, dirs, files in os.walk(chunks_dir):
         for file in sorted(files):
-            if file.endswith('.txt'):
+            if file.endswith(".txt"):
                 filepath = os.path.join(root, file)
                 try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
+                    with open(filepath, "r", encoding="utf-8") as f:
                         content = f.read()
                         chunks.append(f"=== {file} ===\n{content}\n")
                         chunk_files.append(file)
@@ -71,11 +69,11 @@ def run_rag_chat(
     area: str,
     site: str,
     logger: QueryLogger,
-    store_name: str,
-    temperature: float = 0.7
+    store_id: str,
+    temperature: float = 0.7,
 ):
     """
-    Run interactive RAG chat session with manual context loading
+    Run interactive RAG chat session with logging
 
     Args:
         client: Gemini API client
@@ -85,15 +83,28 @@ def run_rag_chat(
         area: Tourism area
         site: Site name
         logger: Query logger instance
-        store_name: File Search Store name (not used - for future compatibility)
+        store_id: Gemini store ID
         temperature: Generation temperature
     """
+    # Get document count from store
+    doc_count = 0
+    try:
+        store = client.file_search_stores.get(name=store_id)
+        # List files in the store to count them
+        files_in_store = list(
+            client.file_search_stores.list_files(file_search_store_name=store_id)
+        )
+        doc_count = len(files_in_store)
+    except Exception as e:
+        print(f"Warning: Could not get document count: {e}")
+
     print("\n" + "=" * 70)
     print("🗺️  Tourism Guide - Interactive Q&A")
     print("=" * 70)
     print(f"Area: {area} | Site: {site}")
     print(f"Model: {model_name}")
-    print(f"Context: {len(context):,} characters from {len(chunk_files)} chunks")
+    print(f"Store: {store_id}")
+    print(f"Documents in storage: {doc_count}")
     print("=" * 70)
     print("Type your questions below. Commands:")
     print("  - 'quit' or 'exit' to end session")
@@ -119,11 +130,11 @@ Answer questions based only on this source material."""
             if not user_input:
                 continue
 
-            if user_input.lower() in ('quit', 'exit', 'q'):
+            if user_input.lower() in ("quit", "exit", "q"):
                 print("\n👋 להתראות / Goodbye!")
                 break
 
-            if user_input.lower() == 'stats':
+            if user_input.lower() == "stats":
                 stats = logger.get_stats()
                 print("\n" + "=" * 70)
                 print("📊 Query Statistics")
@@ -135,17 +146,16 @@ Answer questions based only on this source material."""
                 print("=" * 70 + "\n")
                 continue
 
-            # Query using manual context (File Search not supported in google-generativeai SDK)
-            print("\n-> מחפש בתכנים / Searching context...")
+            # Query with RAG context and timing
+            print("\n-> מחפש בתכנים / Searching content...")
             start_time = time.time()
 
             response = client.models.generate_content(
                 model=model_name,
                 contents=user_input,
                 config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=temperature
-                )
+                    system_instruction=system_instruction, temperature=temperature
+                ),
             )
 
             response_time = time.time() - start_time
@@ -166,7 +176,7 @@ Answer questions based only on this source material."""
                 model=model_name,
                 context_chars=len(context),
                 response_time_seconds=response_time,
-                chunks_used=chunk_files
+                chunks_used=chunk_files,
             )
 
         except KeyboardInterrupt:
@@ -185,31 +195,40 @@ def main():
     )
 
     parser.add_argument(
-        '--area',
-        help='Tourism area (default: auto-detect from registry)'
+        "--area", help="Tourism area (default: auto-detect from registry)"
+    )
+    parser.add_argument("--site", help="Site name (default: auto-detect from registry)")
+    parser.add_argument(
+        "--chunks-dir", help="Directory containing chunk files (default: from config)"
     )
     parser.add_argument(
-        '--site',
-        help='Site name (default: auto-detect from registry)'
-    )
-    parser.add_argument(
-        '--model',
-        help='Gemini model to use (default from config.yaml)'
+        "--model", help="Gemini model to use (default from config.yaml)"
     )
 
     args = parser.parse_args()
 
     # Load configuration
     print("=" * 70)
-    print("📚 Tourism Guide - RAG Chat System")
+    print("📚 Tourism Guide - RAG System")
     print("=" * 70)
 
     try:
         config = GeminiConfig.from_yaml()
 
+        # Assertion 1: Verify API key is not None
+        assert (
+            config.api_key is not None
+        ), "API key is None - check GOOGLE_API_KEY in .env file"
+        assert (
+            len(config.api_key.strip()) > 0
+        ), "API key is empty - check GOOGLE_API_KEY in .env file"
+        print(f"\n✓ API key loaded (length: {len(config.api_key)})")
+
         # Override with command-line arguments
         if args.model:
             config.model_name = args.model
+
+        chunks_dir = args.chunks_dir if args.chunks_dir else config.chunks_dir
 
     except FileNotFoundError as e:
         print(f"\n❌ Configuration error: {e}")
@@ -217,42 +236,44 @@ def main():
     except ValueError as e:
         print(f"\n❌ {e}")
         sys.exit(1)
+    except AssertionError as e:
+        print(f"\n❌ Assertion failed: {e}")
+        sys.exit(1)
 
-    # Get store_id from registry
+    # Determine area/site from registry if not specified
     area = args.area
     site = args.site
-    store_id = None
 
+    if not area or not site:
+        try:
+            registry = StoreRegistry(config.registry_path)
+            all_stores = registry.list_all()
+
+            if all_stores:
+                # Use first available area/site
+                (area, site), store_id = list(all_stores.items())[0]
+                print(f"\n-> Auto-detected: {area} / {site}")
+            else:
+                area = area or "unknown"
+                site = site or "unknown"
+        except Exception as e:
+            print(f"Warning: Could not load registry: {e}")
+            area = area or "unknown"
+            site = site or "unknown"
+
+    # Assertion 2: Verify store exists in registry
     try:
         registry = StoreRegistry(config.registry_path)
-        all_stores = registry.list_all()
-
-        if not all_stores:
-            print(f"\n❌ No stores found in registry.")
-            print("Please run main_upload.py first to create and upload to a store.")
-            sys.exit(1)
-
-
-        # If area/site not specified, use first available
-        if not area or not site:
-            (area, site), store_id = list(all_stores.items())[0]
-            print(f"\n-> Auto-detected: {area} / {site}")
-            print(f"-> Store ID: {store_id}")
-        else:
-            # Look up specific area/site
-            store_id = registry.get_store(area, site)
-            if not store_id:
-                print(f"\n❌ No store found for {area}/{site}")
-                print(f"Available stores:")
-                for (a, s), sid in all_stores.items():
-                    print(f"  - {a}/{s}: {sid}")
-                sys.exit(1)
-            print(f"\n-> Using store: {area} / {site}")
-            print(f"-> Store ID: {store_id}")
-
+        store_id = registry.get_store(area, site)
+        assert (
+            store_id is not None
+        ), f"Store not found in registry for area='{area}', site='{site}'. Run main_upload.py first."
+        print(f"✓ Store verified in registry: {store_id}")
+    except AssertionError as e:
+        print(f"\n❌ Assertion failed: {e}")
+        sys.exit(1)
     except Exception as e:
-        print(f"\n❌ Error loading registry: {e}")
-        print("Please run main_upload.py first to create and upload to a store.")
+        print(f"\n❌ Error verifying store: {e}")
         sys.exit(1)
 
     # Connect to Gemini
@@ -265,42 +286,17 @@ def main():
         print(f"❌ Error connecting to Gemini: {e}")
         sys.exit(1)
 
-    # Initialize store manager with store_id from registry
-    print("\n-> Initializing File Search Store...")
-    try:
-        store_manager = StoreManager(
-            client,
-            f"{area}_{site}_Tourism_RAG",
-            store_id=store_id
-        )
-        store_name = store_manager.store_name
-        print(f"✓ Connected to store: {store_name}")
-    except Exception as e:
-        print(f"❌ Error connecting to store: {e}")
-        sys.exit(1)
-
-    # Load chunks for the area/site (used as fallback)
-    chunks_dir = os.path.join(config.chunks_dir, area, site)
-    print(f"\n-> Loading chunks from: {chunks_dir}")
-
-    context, chunk_files = load_chunks(chunks_dir)
-
-    if not context:
-        print(f"\n❌ No chunks found for {area}/{site}")
-        print(f"Please run main_upload.py first to create chunks.")
-        sys.exit(1)
-
-    print(f"✓ Loaded {len(chunk_files)} chunk files ({len(context):,} characters)")
-
     # Initialize logger
     log_path = os.path.join(os.path.dirname(config.registry_path), "query_log.jsonl")
     logger = QueryLogger(log_path, area=area, site=site)
     print(f"✓ Query logger initialized: {log_path}")
 
     # Start RAG chat session
-    print(f"\n✓ Using model: {config.model_name} (temperature: {config.temperature})")
-    print(f"✓ RAG mode: Manual context loading")
-    print(f"✓ Store ID: {store_id} (for reference only)")
+    print(f"✓ Using model: {config.model_name} (temperature: {config.temperature})")
+
+    # Note: Skipping local chunk loading - using Gemini store directly
+    context = ""  # Not used when querying store
+    chunk_files = []  # Not used when querying store
 
     run_rag_chat(
         client,
@@ -310,8 +306,8 @@ def main():
         area,
         site,
         logger,
-        store_name,
-        config.temperature
+        store_id,
+        config.temperature,
     )
 
 

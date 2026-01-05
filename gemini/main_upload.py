@@ -21,30 +21,29 @@ Usage:
 """
 
 import argparse
-import sys
-import os
 import locale
+import os
+import sys
 
 # Set UTF-8 encoding for the environment
-if sys.stdout.encoding != 'UTF-8':
-    sys.stdout.reconfigure(encoding='utf-8')
-if sys.stderr.encoding != 'UTF-8':
-    sys.stderr.reconfigure(encoding='utf-8')
+if sys.stdout.encoding != "UTF-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr.encoding != "UTF-8":
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # Set locale to support UTF-8
 try:
-    locale.setlocale(locale.LC_ALL, '')
+    locale.setlocale(locale.LC_ALL, "")
 except:
     pass
 
 import google.genai as genai
-
+from chunker import chunk_file_tokens, chunk_text_file
 from config import GeminiConfig
+from directory_parser import DirectoryParser
 from store_manager import StoreManager
 from store_registry import StoreRegistry
 from upload_tracker import UploadTracker
-from directory_parser import DirectoryParser
-from chunker import chunk_text_file, chunk_file_tokens
 
 
 def main():
@@ -52,28 +51,20 @@ def main():
         description="Upload tourism/museum content to Gemini RAG system"
     )
 
+    parser.add_argument("--area", help="Specific area to upload (optional)")
+    parser.add_argument("--site", help="Specific site to upload (requires --area)")
     parser.add_argument(
-        '--area',
-        help='Specific area to upload (optional)'
+        "--force",
+        action="store_true",
+        help="Force re-upload all files (ignore tracking)",
     )
     parser.add_argument(
-        '--site',
-        help='Specific site to upload (requires --area)'
+        "--no-chunk", action="store_true", help="Upload files directly without chunking"
     )
     parser.add_argument(
-        '--force',
-        action='store_true',
-        help='Force re-upload all files (ignore tracking)'
-    )
-    parser.add_argument(
-        '--no-chunk',
-        action='store_true',
-        help='Upload files directly without chunking'
-    )
-    parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Preview what will be uploaded without actually uploading'
+        "--dry-run",
+        action="store_true",
+        help="Preview what will be uploaded without actually uploading",
     )
 
     args = parser.parse_args()
@@ -101,7 +92,9 @@ def main():
         sys.exit(1)
 
     # Parse directory structure
-    print("\n[Step 1/4] Parsing directory structure...")
+    print(
+        "\n[Step 1/4] Parsing directory structure...",
+    )
 
     parser_obj = DirectoryParser(config.content_root, config.supported_formats)
 
@@ -113,17 +106,21 @@ def main():
             structure = {
                 (area, site): files
                 for (area, site), files in structure.items()
-                if area.lower() == args.area.lower() and
-                   (not args.site or site.lower() == args.site.lower())
+                if area.lower() == args.area.lower()
+                and (not args.site or site.lower() == args.site.lower())
             }
 
             if not structure:
-                print(f"\n❌ No content found for area='{args.area}'" +
-                      (f", site='{args.site}'" if args.site else ""))
+                print(
+                    f"\n❌ No content found for area='{args.area}'"
+                    + (f", site='{args.site}'" if args.site else "")
+                )
                 sys.exit(1)
 
         total_files = sum(len(files) for files in structure.values())
-        print(f"✓ Found {len(structure)} area/site combinations with {total_files} files")
+        print(
+            f"✓ Found {len(structure)} area/site combinations with {total_files} files"
+        )
 
     except FileNotFoundError as e:
         print(f"\n❌ {e}")
@@ -137,7 +134,7 @@ def main():
     # Initialize tracking
     print(f"\n[Step {'2/4' if not args.dry_run else '2/3'}] Checking upload history...")
 
-    tracker = a place to eat (config.upload_tracking_path)
+    tracker = UploadTracker(config.upload_tracking_path)
 
     # Connect to Gemini (skip in dry-run mode)
     if not args.dry_run:
@@ -157,7 +154,9 @@ def main():
 
     # Process each area/site
     step_num = "3/3" if args.dry_run else "4/4"
-    print(f"\n[Step {step_num}] {'Previewing' if args.dry_run else 'Processing and uploading'} content...")
+    print(
+        f"\n[Step {step_num}] {'Previewing' if args.dry_run else 'Processing and uploading'} content..."
+    )
 
     force_upload = args.force or config.force_reupload
     total_uploaded = 0
@@ -186,7 +185,9 @@ def main():
         if args.no_chunk:
             chunk_files = files_to_upload
             if args.dry_run:
-                print(f"   -> Would upload {len(chunk_files)} files directly (no chunking)")
+                print(
+                    f"   -> Would upload {len(chunk_files)} files directly (no chunking)"
+                )
         else:
             # Determine chunking method
             if config.use_token_chunking:
@@ -203,11 +204,7 @@ def main():
 
             for file_path in files_to_upload:
                 # Create chunks directory for this area/site
-                area_site_chunks_dir = os.path.join(
-                    config.chunks_dir,
-                    area,
-                    site
-                )
+                area_site_chunks_dir = os.path.join(config.chunks_dir, area, site)
 
                 # Generate unique ID for this file
                 file_id = os.path.splitext(os.path.basename(file_path))[0]
@@ -220,20 +217,21 @@ def main():
                             file_id,
                             chunk_tokens=config.chunk_tokens,
                             overlap_percent=config.chunk_overlap_percent,
-                            output_dir=area_site_chunks_dir
+                            output_dir=area_site_chunks_dir,
                         )
                     else:
                         chunks = chunk_text_file(
                             file_path,
                             file_id,
                             chunk_size=config.chunk_size,
-                            output_dir=area_site_chunks_dir
+                            output_dir=area_site_chunks_dir,
                         )
                     chunk_files.extend(chunks)
                 else:
                     # Estimate number of chunks for dry run
                     try:
                         from file_parser import parse_file
+
                         content = parse_file(file_path)
                         if config.use_token_chunking:
                             # Estimate: ~4 chars per token
@@ -267,13 +265,13 @@ def main():
                 store_id = registry.get_store(area, site)
 
                 store_manager = StoreManager(
-                    client,
-                    f"{area}_{site}_Tourism_RAG",
-                    store_id=store_id
+                    client, f"{area}_{site}_Tourism_RAG", store_id=store_id
                 )
 
                 print(f"   -> Uploading to Gemini store...")
-                store_manager.upload_files(chunk_files, max_wait_seconds=config.max_upload_wait_seconds)
+                store_manager.upload_files(
+                    chunk_files, max_wait_seconds=config.max_upload_wait_seconds
+                )
 
                 # Register the store
                 store_name = store_manager.store_name
@@ -282,9 +280,9 @@ def main():
                     site=site,
                     store_name=store_name,
                     metadata={
-                        'file_count': len(files_to_upload),
-                        'chunk_count': len(chunk_files)
-                    }
+                        "file_count": len(files_to_upload),
+                        "chunk_count": len(chunk_files),
+                    },
                 )
 
                 # Mark files as uploaded
@@ -317,7 +315,9 @@ def main():
         print("=" * 70)
 
         if total_uploaded == 0:
-            print("\nℹ️  No new files were uploaded. Use --force to re-upload existing files.")
+            print(
+                "\nℹ️  No new files were uploaded. Use --force to re-upload existing files."
+            )
 
 
 if __name__ == "__main__":

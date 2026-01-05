@@ -3,6 +3,24 @@ Utility functions for the Gemini Tourism RAG system
 """
 
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+def load_env_file():
+    """
+    Load environment variables from .env file in project root
+    """
+    # Find project root (parent of gemini directory)
+    current_dir = Path(__file__).resolve().parent
+    project_root = current_dir.parent
+    env_path = project_root / ".env"
+
+    if env_path.exists():
+        load_dotenv(env_path)
+    else:
+        raise FileNotFoundError(f".env file not found at {env_path}")
 
 
 def source_key(param="OPENAI_API_KEY"):

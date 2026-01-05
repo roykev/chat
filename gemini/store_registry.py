@@ -5,8 +5,8 @@ For tourism/museum app hierarchy
 
 import json
 import os
-from typing import Optional, Dict, Tuple
 from datetime import datetime
+from typing import Dict, Optional, Tuple
 
 
 class StoreRegistry:
@@ -26,18 +26,20 @@ class StoreRegistry:
         """Load registry from disk"""
         if os.path.exists(self.registry_file):
             try:
-                with open(self.registry_file, 'r', encoding='utf-8') as f:
+                with open(self.registry_file, "r", encoding="utf-8") as f:
                     return json.load(f)
             except json.JSONDecodeError:
-                print(f"Warning: Could not parse {self.registry_file}. Starting with empty registry.")
+                print(
+                    f"Warning: Could not parse {self.registry_file}. Starting with empty registry."
+                )
                 return {}
         return {}
 
     def _save_registry(self):
         """Save registry to disk"""
         try:
-            os.makedirs(os.path.dirname(self.registry_file) or '.', exist_ok=True)
-            with open(self.registry_file, 'w', encoding='utf-8') as f:
+            os.makedirs(os.path.dirname(self.registry_file) or ".", exist_ok=True)
+            with open(self.registry_file, "w", encoding="utf-8") as f:
                 json.dump(self.registry, f, indent=2, ensure_ascii=False)
             print(f"-> Registry saved to {self.registry_file}")
         except Exception as e:
@@ -49,11 +51,7 @@ class StoreRegistry:
         return f"{area.lower().strip()}:{site.lower().strip()}"
 
     def register_store(
-        self,
-        area: str,
-        site: str,
-        store_name: str,
-        metadata: Optional[Dict] = None
+        self, area: str, site: str, store_name: str, metadata: Optional[Dict] = None
     ):
         """
         Register a store for an area/site pair
@@ -70,7 +68,7 @@ class StoreRegistry:
         existing_entry = self.registry.get(key)
         created_at = None
         if existing_entry and isinstance(existing_entry, dict):
-            created_at = existing_entry.get('metadata', {}).get('created_at')
+            created_at = existing_entry.get("metadata", {}).get("created_at")
 
         entry = {
             "store_id": store_name,
@@ -78,8 +76,8 @@ class StoreRegistry:
                 "area": area,
                 "site": site,
                 "created_at": created_at or datetime.now().isoformat(),
-                "last_updated": datetime.now().isoformat()
-            }
+                "last_updated": datetime.now().isoformat(),
+            },
         }
 
         if metadata:
@@ -130,7 +128,7 @@ class StoreRegistry:
         """
         result = {}
         for key, entry in self.registry.items():
-            area, site = key.split(':', 1)
+            area, site = key.split(":", 1)
             store_id = entry.get("store_id") if isinstance(entry, dict) else entry
             result[(area, site)] = store_id
         return result
@@ -143,13 +141,13 @@ class StoreRegistry:
 
         print("\n=== Store Registry (Tourism/Museum Sites) ===")
         for key, entry in sorted(self.registry.items()):
-            area, site = key.split(':', 1)
+            area, site = key.split(":", 1)
             store_id = entry.get("store_id") if isinstance(entry, dict) else entry
             metadata = entry.get("metadata", {}) if isinstance(entry, dict) else {}
 
             print(f"  {area.title()} - {site.title()}")
             print(f"    Store ID: {store_id}")
-            if metadata.get('last_updated'):
+            if metadata.get("last_updated"):
                 print(f"    Last Updated: {metadata['last_updated']}")
         print("=" * 70)
 
@@ -159,7 +157,9 @@ class StoreRegistry:
             print("-> Registry is already empty")
             return False
 
-        print(f"\n⚠️  WARNING: About to clear {len(self.registry)} registry entry/entries!")
+        print(
+            f"\n⚠️  WARNING: About to clear {len(self.registry)} registry entry/entries!"
+        )
         confirmation = input("Type 'CLEAR' to confirm: ")
 
         if confirmation != "CLEAR":

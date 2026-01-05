@@ -3,8 +3,8 @@ Directory Parser - Parse area/site directory structure and collect files
 """
 
 import os
-from typing import List, Dict, Tuple
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 
 class DirectoryParser:

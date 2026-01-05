@@ -4,14 +4,16 @@ Supports various file formats via file_parser
 Supports both character-based and token-based chunking
 """
 
-import os
 import hashlib
+import os
 import unicodedata
 from typing import List, Optional
+
 from file_parser import parse_file
 
 try:
     import tiktoken
+
     TIKTOKEN_AVAILABLE = True
 except ImportError:
     TIKTOKEN_AVAILABLE = False
@@ -31,35 +33,36 @@ def sanitize_filename(filename: str) -> str:
     # Try to transliterate Unicode characters to ASCII
     try:
         # Normalize unicode characters
-        normalized = unicodedata.normalize('NFKD', filename)
+        normalized = unicodedata.normalize("NFKD", filename)
         # Encode to ASCII, ignoring characters that can't be converted
-        ascii_name = normalized.encode('ascii', 'ignore').decode('ascii')
+        ascii_name = normalized.encode("ascii", "ignore").decode("ascii")
 
         # If we lost too many characters, use a hash instead
         if len(ascii_name) < len(filename) * 0.3:  # Lost more than 70%
             # Create a hash of the original filename
-            file_hash = hashlib.md5(filename.encode('utf-8')).hexdigest()[:8]
+            file_hash = hashlib.md5(filename.encode("utf-8")).hexdigest()[:8]
             return f"file_{file_hash}"
 
         # Remove any remaining problematic characters
-        safe_name = ''.join(c if c.isalnum() or c in '_- ' else '_' for c in ascii_name)
+        safe_name = "".join(c if c.isalnum() or c in "_- " else "_" for c in ascii_name)
         # Clean up multiple underscores and spaces
-        safe_name = ' '.join(safe_name.split())
-        safe_name = '_'.join(safe_name.split('_'))
+        safe_name = " ".join(safe_name.split())
+        safe_name = "_".join(safe_name.split("_"))
 
-        return safe_name if safe_name else f"file_{hashlib.md5(filename.encode('utf-8')).hexdigest()[:8]}"
+        return (
+            safe_name
+            if safe_name
+            else f"file_{hashlib.md5(filename.encode('utf-8')).hexdigest()[:8]}"
+        )
 
     except Exception:
         # Fallback to hash if anything goes wrong
-        file_hash = hashlib.md5(filename.encode('utf-8')).hexdigest()[:8]
+        file_hash = hashlib.md5(filename.encode("utf-8")).hexdigest()[:8]
         return f"file_{file_hash}"
 
 
 def chunk_text_file(
-    file_path: str,
-    file_id: str,
-    chunk_size: int = 1000,
-    output_dir: str = "chunks"
+    file_path: str, file_id: str, chunk_size: int = 1000, output_dir: str = "chunks"
 ) -> List[str]:
     """
     Parse and split a file into chunks, save as separate text files
@@ -99,31 +102,31 @@ def chunk_text_file(
 
     while current_pos < len(content):
         # Get chunk of text
-        chunk_text = content[current_pos:current_pos + chunk_size]
+        chunk_text = content[current_pos : current_pos + chunk_size]
 
         # Try to break at sentence/paragraph boundary if possible
         if current_pos + chunk_size < len(content):
             # Look for paragraph break
-            last_newline = chunk_text.rfind('\n\n')
+            last_newline = chunk_text.rfind("\n\n")
             if last_newline > chunk_size * 0.5:  # At least 50% through chunk
                 chunk_text = chunk_text[:last_newline]
             else:
                 # Look for sentence break
                 last_period = max(
-                    chunk_text.rfind('. '),
-                    chunk_text.rfind('.\n'),
-                    chunk_text.rfind('! '),
-                    chunk_text.rfind('? ')
+                    chunk_text.rfind(". "),
+                    chunk_text.rfind(".\n"),
+                    chunk_text.rfind("! "),
+                    chunk_text.rfind("? "),
                 )
                 if last_period > chunk_size * 0.5:
-                    chunk_text = chunk_text[:last_period + 1]
+                    chunk_text = chunk_text[: last_period + 1]
 
         # Save chunk to file
         chunk_num += 1
         chunk_filename = f"{safe_file_id}_chunk_{chunk_num:03d}.txt"
         chunk_filepath = os.path.join(output_dir, chunk_filename)
 
-        with open(chunk_filepath, 'w', encoding='utf-8') as f:
+        with open(chunk_filepath, "w", encoding="utf-8") as f:
             f.write(f"--- {file_id}: Chunk {chunk_num} ---\n")
             f.write(f"Source: {os.path.basename(file_path)}\n\n")
             f.write(chunk_text)
@@ -146,7 +149,7 @@ def chunk_text_smart(
     file_id: str,
     chunk_size: int = 1000,
     overlap: int = 100,
-    output_dir: str = "chunks"
+    output_dir: str = "chunks",
 ) -> List[str]:
     """
     Split text into overlapping chunks with smart boundary detection
@@ -180,16 +183,16 @@ def chunk_text_smart(
         # Find good break point (if not at end)
         if end_pos < len(text):
             # Try to break at paragraph
-            last_para = chunk_text.rfind('\n\n')
+            last_para = chunk_text.rfind("\n\n")
             if last_para > chunk_size * 0.6:
                 chunk_text = chunk_text[:last_para]
                 end_pos = current_pos + last_para
             else:
                 # Try to break at sentence
-                for delimiter in ['. ', '.\n', '! ', '? ']:
+                for delimiter in [". ", ".\n", "! ", "? "]:
                     last_sent = chunk_text.rfind(delimiter)
                     if last_sent > chunk_size * 0.6:
-                        chunk_text = chunk_text[:last_sent + len(delimiter)]
+                        chunk_text = chunk_text[: last_sent + len(delimiter)]
                         end_pos = current_pos + last_sent + len(delimiter)
                         break
 
@@ -198,7 +201,7 @@ def chunk_text_smart(
         chunk_filename = f"{safe_file_id}_chunk_{chunk_num:03d}.txt"
         chunk_filepath = os.path.join(output_dir, chunk_filename)
 
-        with open(chunk_filepath, 'w', encoding='utf-8') as f:
+        with open(chunk_filepath, "w", encoding="utf-8") as f:
             f.write(f"--- {file_id}: Chunk {chunk_num} ---\n\n")
             f.write(chunk_text.strip())
 
@@ -218,7 +221,7 @@ def chunk_text_tokens(
     chunk_tokens: int = 400,
     overlap_percent: float = 0.15,
     output_dir: str = "chunks",
-    encoding_name: str = "cl100k_base"
+    encoding_name: str = "cl100k_base",
 ) -> List[str]:
     """
     Split text into overlapping chunks based on token count
@@ -235,7 +238,9 @@ def chunk_text_tokens(
         List of file paths for created chunks
     """
     if not TIKTOKEN_AVAILABLE:
-        print("Warning: tiktoken not available. Falling back to character-based chunking.")
+        print(
+            "Warning: tiktoken not available. Falling back to character-based chunking."
+        )
         # Approximate: 1 token ≈ 4 characters
         char_size = chunk_tokens * 4
         char_overlap = int(char_size * overlap_percent)
@@ -279,22 +284,24 @@ def chunk_text_tokens(
         # Try to find natural break points if not at the end
         if end_idx < total_tokens:
             # Look for paragraph break (try to keep last 10% for boundary search)
-            boundary_search = chunk_text[int(len(chunk_text) * 0.9):]
-            para_break = boundary_search.rfind('\n\n')
+            boundary_search = chunk_text[int(len(chunk_text) * 0.9) :]
+            para_break = boundary_search.rfind("\n\n")
 
             if para_break > 0:
                 # Found paragraph break, adjust chunk
-                adjusted_chunk = chunk_text[:int(len(chunk_text) * 0.9) + para_break]
+                adjusted_chunk = chunk_text[: int(len(chunk_text) * 0.9) + para_break]
                 # Re-encode to get actual token count
                 adjusted_tokens = encoding.encode(adjusted_chunk)
                 chunk_text = adjusted_chunk
                 end_idx = start_idx + len(adjusted_tokens)
             else:
                 # Try sentence break
-                for delimiter in ['. ', '.\n', '! ', '? ']:
+                for delimiter in [". ", ".\n", "! ", "? "]:
                     sent_break = boundary_search.rfind(delimiter)
                     if sent_break > 0:
-                        adjusted_chunk = chunk_text[:int(len(chunk_text) * 0.9) + sent_break + len(delimiter)]
+                        adjusted_chunk = chunk_text[
+                            : int(len(chunk_text) * 0.9) + sent_break + len(delimiter)
+                        ]
                         adjusted_tokens = encoding.encode(adjusted_chunk)
                         chunk_text = adjusted_chunk
                         end_idx = start_idx + len(adjusted_tokens)
@@ -307,8 +314,10 @@ def chunk_text_tokens(
 
         actual_tokens = len(encoding.encode(chunk_text))
 
-        with open(chunk_filepath, 'w', encoding='utf-8') as f:
-            f.write(f"--- {file_id}: Chunk {chunk_num} ({actual_tokens} tokens) ---\n\n")
+        with open(chunk_filepath, "w", encoding="utf-8") as f:
+            f.write(
+                f"--- {file_id}: Chunk {chunk_num} ({actual_tokens} tokens) ---\n\n"
+            )
             f.write(chunk_text.strip())
 
         chunks.append(chunk_filepath)
@@ -326,7 +335,7 @@ def chunk_file_tokens(
     file_id: str,
     chunk_tokens: int = 400,
     overlap_percent: float = 0.15,
-    output_dir: str = "chunks"
+    output_dir: str = "chunks",
 ) -> List[str]:
     """
     Parse file and split into token-based chunks with overlap
@@ -355,4 +364,6 @@ def chunk_file_tokens(
         print(f"   Warning: No text content extracted from {file_path}")
         return []
 
-    return chunk_text_tokens(content, file_id, chunk_tokens, overlap_percent, output_dir)
+    return chunk_text_tokens(
+        content, file_id, chunk_tokens, overlap_percent, output_dir
+    )

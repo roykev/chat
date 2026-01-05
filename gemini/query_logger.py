@@ -7,7 +7,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
 
 class QueryLogger:
@@ -38,7 +38,7 @@ class QueryLogger:
         model: str,
         context_chars: int,
         response_time_seconds: float,
-        chunks_used: Optional[List[str]] = None
+        chunks_used: Optional[List[str]] = None,
     ):
         """
         Log a query and its answer
@@ -67,8 +67,8 @@ class QueryLogger:
             log_entry["chunks_used"] = chunks_used
 
         # Append to log file (JSON Lines format)
-        with open(self.log_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+        with open(self.log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
     def get_recent_queries(self, n: int = 10) -> List[Dict]:
         """
@@ -83,7 +83,7 @@ class QueryLogger:
         if not os.path.exists(self.log_path):
             return []
 
-        with open(self.log_path, 'r', encoding='utf-8') as f:
+        with open(self.log_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         # Parse last N lines
@@ -110,7 +110,7 @@ class QueryLogger:
                 "total_queries": 0,
                 "avg_response_time_seconds": 0,
                 "areas": [],
-                "sites": []
+                "sites": [],
             }
 
         total_queries = 0
@@ -118,20 +118,24 @@ class QueryLogger:
         areas = set()
         sites = set()
 
-        with open(self.log_path, 'r', encoding='utf-8') as f:
+        with open(self.log_path, "r", encoding="utf-8") as f:
             for line in f:
                 try:
                     entry = json.loads(line.strip())
                     total_queries += 1
-                    total_response_time += entry.get('response_time_seconds', 0)
-                    areas.add(entry.get('area', ''))
-                    sites.add(entry.get('site', ''))
+                    total_response_time += entry.get("response_time_seconds", 0)
+                    areas.add(entry.get("area", ""))
+                    sites.add(entry.get("site", ""))
                 except json.JSONDecodeError:
                     continue
 
         return {
             "total_queries": total_queries,
-            "avg_response_time_seconds": round(total_response_time / total_queries, 2) if total_queries > 0 else 0,
+            "avg_response_time_seconds": (
+                round(total_response_time / total_queries, 2)
+                if total_queries > 0
+                else 0
+            ),
             "areas": sorted(list(areas)),
-            "sites": sorted(list(sites))
+            "sites": sorted(list(sites)),
         }

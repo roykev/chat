@@ -8,18 +8,20 @@ This is a minimal Python project currently containing a single starter script (`
 
 ## Development Setup
 
-The project uses a Python virtual environment named "chat" (referenced in `.idea/chat.iml`).
+The project uses a Python virtual environment stored at `.venv/`, which is also configured as the VS Code interpreter for this workspace.
 
 To set up the development environment:
 ```bash
 # Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Linux/Mac
-# or: venv\Scripts\activate  # On Windows
+python -m venv .venv
+source .venv/bin/activate  # On Linux/Mac
+# or: .venv\Scripts\activate  # On Windows
 
-# Install dependencies (when requirements.txt is added)
+# Install dependencies
 pip install -r requirements.txt
 ```
+
+In VS Code, select the interpreter at `.venv/bin/python` (or `.venv\Scripts\python.exe` on Windows) for linting, running, and debugging.
 
 ## Running Code
 

@@ -22,13 +22,13 @@ def parse_file(file_path: str) -> str:
     """
     ext = os.path.splitext(file_path)[1].lower()
 
-    if ext == '.txt':
+    if ext == ".txt":
         return parse_txt(file_path)
-    elif ext == '.md':
+    elif ext == ".md":
         return parse_markdown(file_path)
-    elif ext == '.docx':
+    elif ext == ".docx":
         return parse_docx(file_path)
-    elif ext == '.pdf':
+    elif ext == ".pdf":
         return parse_pdf(file_path)
     else:
         raise ValueError(f"Unsupported file format: {ext}")
@@ -36,7 +36,7 @@ def parse_file(file_path: str) -> str:
 
 def parse_txt(file_path: str) -> str:
     """Parse plain text file"""
-    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
         return f.read()
 
 
@@ -44,7 +44,8 @@ def parse_markdown(file_path: str) -> str:
     """Parse markdown file"""
     try:
         import markdown
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             md_content = f.read()
 
         # Convert markdown to plain text (strip HTML tags)
@@ -52,12 +53,15 @@ def parse_markdown(file_path: str) -> str:
 
         # Simple HTML tag removal
         import re
-        text = re.sub('<[^<]+?>', '', html)
+
+        text = re.sub("<[^<]+?>", "", html)
 
         return text
     except ImportError:
         # Fallback: treat as plain text
-        print(f"Warning: markdown library not found, treating {file_path} as plain text")
+        print(
+            f"Warning: markdown library not found, treating {file_path} as plain text"
+        )
         return parse_txt(file_path)
 
 
@@ -77,11 +81,11 @@ def parse_docx(file_path: str) -> str:
         # Extract tables
         for table in doc.tables:
             for row in table.rows:
-                row_text = ' | '.join(cell.text.strip() for cell in row.cells)
+                row_text = " | ".join(cell.text.strip() for cell in row.cells)
                 if row_text.strip():
                     text_parts.append(row_text)
 
-        return '\n\n'.join(text_parts)
+        return "\n\n".join(text_parts)
 
     except ImportError:
         raise ValueError(
@@ -105,7 +109,7 @@ def parse_pdf(file_path: str) -> str:
             if text.strip():
                 text_parts.append(text)
 
-        return '\n\n'.join(text_parts)
+        return "\n\n".join(text_parts)
 
     except ImportError:
         raise ValueError(

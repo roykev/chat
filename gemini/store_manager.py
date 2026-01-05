@@ -14,7 +14,9 @@ from google.genai import types
 class StoreManager:
     """Manages Gemini File Search Store operations"""
 
-    def __init__(self, client: genai.Client, store_display_name: str, store_id: str = None):
+    def __init__(
+        self, client: genai.Client, store_display_name: str, store_id: str = None
+    ):
         """
         Initialize store manager
 
@@ -50,7 +52,9 @@ class StoreManager:
                 print(f"-> Error connecting to store {self.store_id}: {e}")
                 print(f"-> Falling back to search by display name...")
 
-        print(f"\n-> Checking for existing File Search Store: '{self.store_display_name}'...")
+        print(
+            f"\n-> Checking for existing File Search Store: '{self.store_display_name}'..."
+        )
 
         # List stores and check for display name match
         for store in self.client.file_search_stores.list():
@@ -76,11 +80,7 @@ class StoreManager:
         self._store = store
         return store
 
-    def upload_files(
-        self,
-        file_paths: List[str],
-        max_wait_seconds: int = 300
-    ) -> List:
+    def upload_files(self, file_paths: List[str], max_wait_seconds: int = 300) -> List:
         """
         Upload multiple files to the store
 
@@ -100,7 +100,9 @@ class StoreManager:
             try:
                 filename = os.path.basename(file_path)
                 # Handle Unicode filenames safely
-                safe_filename = filename.encode('utf-8', errors='replace').decode('utf-8')
+                safe_filename = filename.encode("utf-8", errors="replace").decode(
+                    "utf-8"
+                )
                 print(f"   Uploading: {safe_filename}")
             except Exception:
                 print(f"   Uploading: {file_path}")
@@ -108,13 +110,14 @@ class StoreManager:
             try:
                 # Ensure file path is properly encoded
                 if isinstance(file_path, str):
-                    file_path_encoded = file_path.encode('utf-8', errors='replace').decode('utf-8')
+                    file_path_encoded = file_path.encode(
+                        "utf-8", errors="replace"
+                    ).decode("utf-8")
                 else:
                     file_path_encoded = file_path
 
                 op = self.client.file_search_stores.upload_to_file_search_store(
-                    file_search_store_name=store.name,
-                    file=file_path
+                    file_search_store_name=store.name, file=file_path
                 )
                 operations.append(op)
             except Exception as e:
@@ -143,7 +146,9 @@ class StoreManager:
             if current_time - last_status_time >= 30:
                 elapsed = int(current_time - start_time)
                 done_count = sum(1 for op in operations if op.done)
-                print(f"   [{elapsed}s] {done_count}/{len(operations)} operations completed...")
+                print(
+                    f"   [{elapsed}s] {done_count}/{len(operations)} operations completed..."
+                )
                 last_status_time = current_time
 
             time.sleep(2)
@@ -155,7 +160,7 @@ class StoreManager:
 
         for op in operations:
             if op.done:
-                if hasattr(op, 'error') and op.error:
+                if hasattr(op, "error") and op.error:
                     print(f"   ✗ Upload failed: {op.error}")
                     failed += 1
                 else:
@@ -171,7 +176,9 @@ class StoreManager:
             print(f"   ⚠ Incomplete: {incomplete}")
 
         if failed > 0 or incomplete > 0:
-            raise Exception(f"Upload failed: {succeeded} succeeded, {failed} failed, {incomplete} incomplete")
+            raise Exception(
+                f"Upload failed: {succeeded} succeeded, {failed} failed, {incomplete} incomplete"
+            )
 
         print("-> All files successfully uploaded to store.")
         return operations
@@ -210,7 +217,7 @@ class StoreManager:
             stores = list(self.client.file_search_stores.list())
             print(f"\n-> Found {len(stores)} total stores:")
             for i, store in enumerate(stores, 1):
-                display_name = getattr(store, 'display_name', 'N/A')
+                display_name = getattr(store, "display_name", "N/A")
                 print(f"   [{i}] {store.name}")
                 print(f"       Display Name: {display_name}")
             return stores
