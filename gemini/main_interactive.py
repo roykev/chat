@@ -215,6 +215,11 @@ def main():
         "--test",
         help="Non-interactive test mode: provide a single question to test",
     )
+    parser.add_argument(
+        "--diagnostics",
+        action="store_true",
+        help="Show diagnostics: storage info, file counts, configuration",
+    )
 
     args = parser.parse_args()
 
@@ -296,6 +301,90 @@ def main():
     except Exception as e:
         print(f"❌ Error connecting to Gemini: {e}")
         sys.exit(1)
+
+    # Diagnostics mode
+    if args.diagnostics:
+        print("\n" + "=" * 70)
+        print("🔍 DIAGNOSTICS")
+        print("=" * 70)
+
+        # Configuration
+        print("\n📋 Configuration:")
+        print(f"  Config file: config.yaml")
+        print(f"  API key: {config.api_key[:20]}... (length: {len(config.api_key)})")
+        print(f"  Model: {config.model_name}")
+        print(f"  Temperature: {config.temperature}")
+        print(f"  Content root: {config.content_root}")
+        print(f"  Chunks directory: {config.chunks_dir}")
+        print(f"  Registry path: {config.registry_path}")
+
+        # Registry info
+        print("\n📂 Registry Info:")
+        registry = StoreRegistry(config.registry_path)
+        all_stores = registry.list_all()
+        print(f"  Total registered stores: {len(all_stores)}")
+        for (reg_area, reg_site), reg_store_id in all_stores.items():
+            metadata = registry.registry.get(f"{reg_area}:{reg_site}", {}).get(
+                "metadata", {}
+            )
+            print(f"\n  [{reg_area} / {reg_site}]")
+            print(f"    Store ID: {reg_store_id}")
+            print(f"    Files: {metadata.get('file_count', 'N/A')}")
+            print(f"    Chunks: {metadata.get('chunk_count', 'N/A')}")
+            print(f"    Created: {metadata.get('created_at', 'N/A')}")
+            print(f"    Updated: {metadata.get('last_updated', 'N/A')}")
+
+        # Current area/site
+        print(f"\n🎯 Current Selection:")
+        print(f"  Area: {area}")
+        print(f"  Site: {site}")
+        print(f"  Store ID: {store_id}")
+
+        # Check chunks directory
+        area_site_chunks_dir = os.path.join(config.chunks_dir, area, site)
+        print(f"\n📁 Chunks Directory:")
+        print(f"  Path: {area_site_chunks_dir}")
+        if os.path.exists(area_site_chunks_dir):
+            chunk_files = [
+                f for f in os.listdir(area_site_chunks_dir) if f.endswith(".txt")
+            ]
+            print(f"  Exists: Yes")
+            print(f"  Chunk files: {len(chunk_files)}")
+            total_size = sum(
+                os.path.getsize(os.path.join(area_site_chunks_dir, f))
+                for f in chunk_files
+            )
+            print(f"  Total size: {total_size:,} bytes ({total_size / 1024:.1f} KB)")
+            if chunk_files:
+                print(f"  Files:")
+                for cf in sorted(chunk_files)[:5]:
+                    size = os.path.getsize(os.path.join(area_site_chunks_dir, cf))
+                    print(f"    - {cf} ({size} bytes)")
+                if len(chunk_files) > 5:
+                    print(f"    ... and {len(chunk_files) - 5} more")
+        else:
+            print(f"  Exists: No")
+
+        # Files API info
+        print(f"\n☁️  Gemini Files API:")
+        try:
+            uploaded_files = list(client.files.list())
+            print(f"  Total uploaded files: {len(uploaded_files)}")
+            if uploaded_files:
+                print(f"  Files:")
+                for uf in uploaded_files[:10]:
+                    print(f"    - {uf.name}")
+                    print(f"      Display name: {uf.display_name}")
+                    print(f"      State: {uf.state}")
+                    print(f"      Created: {uf.create_time}")
+                    print(f"      Expires: {uf.expiration_time}")
+                if len(uploaded_files) > 10:
+                    print(f"    ... and {len(uploaded_files) - 10} more")
+        except Exception as e:
+            print(f"  Error listing files: {e}")
+
+        print("\n" + "=" * 70)
+        sys.exit(0)
 
     # Initialize logger
     log_path = os.path.join(os.path.dirname(config.registry_path), "query_log.jsonl")
