@@ -84,7 +84,7 @@ class UploadManager:
             List of dicts with file info
         """
         files = []
-        for key, data in self.tracker.tracking.items():
+        for key, data in self.tracker.tracking_data.items():
             if data.get("area") == area and data.get("site") == site:
                 files.append(
                     {
@@ -119,18 +119,18 @@ class UploadManager:
             store_key = f"{area}:{site}"
             if store_key in self.registry.registry:
                 del self.registry.registry[store_key]
-                self.registry.save()
+                self.registry._save_registry()
 
             # Remove from tracking
             keys_to_remove = []
-            for key, data in self.tracker.tracking.items():
+            for key, data in self.tracker.tracking_data.items():
                 if data.get("area") == area and data.get("site") == site:
                     keys_to_remove.append(key)
 
             for key in keys_to_remove:
-                del self.tracker.tracking[key]
+                del self.tracker.tracking_data[key]
 
-            self.tracker.save()
+            self.tracker._save_tracking()
 
             return True, f"Successfully removed {area}/{site} from local tracking"
 

@@ -349,59 +349,50 @@ def main():
         if not summary:
             st.info("No content uploaded yet.")
         else:
-            # Display as dataframe
+            # Display content with delete buttons
             import pandas as pd
 
-            df = pd.DataFrame(summary)
-            st.dataframe(
-                df,
-                column_config={
-                    "area": "Area",
-                    "site": "Site",
-                    "store_id": "Store ID",
-                    "file_count": "Files",
-                    "chunk_count": "Chunks",
-                    "created_at": "Created",
-                    "last_updated": "Updated",
-                },
-                hide_index=True,
-                use_container_width=True,
-            )
+            for idx, item in enumerate(summary):
+                col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 3, 1, 1, 1])
 
-        st.markdown("---")
+                with col1:
+                    st.write(f"**{item['area']}**")
 
-        # Remove content section
-        st.subheader("🗑️ Remove Content")
+                with col2:
+                    st.write(item["site"])
 
-        col1, col2, col3 = st.columns([2, 2, 1])
-
-        with col1:
-            remove_area = st.selectbox(
-                "Select Area to Remove",
-                options=[s["area"] for s in summary],
-                key="remove_area",
-            )
-
-        with col2:
-            # Filter sites for selected area
-            available_sites = [s["site"] for s in summary if s["area"] == remove_area]
-            remove_site = st.selectbox(
-                "Select Site to Remove", options=available_sites, key="remove_site"
-            )
-
-        with col3:
-            st.write("")  # Spacing
-            st.write("")  # Spacing
-            if st.button("🗑️ Remove", type="primary"):
-                with st.spinner("Removing content..."):
-                    success, message = st.session_state.upload_manager.remove_location(
-                        remove_area, remove_site
+                with col3:
+                    st.caption(
+                        item["store_id"][:40] + "..."
+                        if len(item["store_id"]) > 40
+                        else item["store_id"]
                     )
-                    if success:
-                        st.success(message)
-                        st.rerun()
-                    else:
-                        st.error(message)
+
+                with col4:
+                    st.metric("Files", item["file_count"])
+
+                with col5:
+                    st.metric("Chunks", item["chunk_count"])
+
+                with col6:
+                    if st.button(
+                        "🗑️",
+                        key=f"delete_{idx}",
+                        help=f"Delete {item['area']}/{item['site']}",
+                    ):
+                        with st.spinner(f"Removing {item['area']}/{item['site']}..."):
+                            success, message = (
+                                st.session_state.upload_manager.remove_location(
+                                    item["area"], item["site"]
+                                )
+                            )
+                            if success:
+                                st.success(message)
+                                st.rerun()
+                            else:
+                                st.error(message)
+
+                st.divider()
 
         st.markdown("---")
 
